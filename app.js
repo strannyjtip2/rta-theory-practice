@@ -1,17 +1,30 @@
-/* RTA Dubai Theory Practice — unofficial local trainer */
+/* RTA Dubai Theory Practice — unofficial local trainer + vocab */
 (function () {
   'use strict';
 
   const LETTERS = 'ABCDEFGH';
+  const LS_KNOWN = 'rta-vocab-known-v1';
+  const LS_LEARN = 'rta-vocab-learning-v1';
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
   let DATA = null;
+  let GLOSSARY = {}; // lowercased EN → RU
+  let PHRASE_LIST = []; // longest-first phrases for matching
+  let WORD_SET = new Set();
+  let known = new Set();
+  let learning = new Set();
+  let glossCurrent = null; // {term, ru}
+  let vocabTab = 'learning';
+  let flashQueue = [];
+  let flashIdx = 0;
+  let flashRevealed = false;
+
   let state = {
     mode: null, // 'exam' | 'practice'
     queue: [],
     index: 0,
-    answers: [], // {qid, chosenIdx, correctIdx, ok, opts}
+    answers: [],
     startedAt: 0,
     endsAt: 0,
     timerId: null,
@@ -45,6 +58,43 @@
     const m = Math.floor(s / 60);
     const r = s % 60;
     return `${m}:${String(r).padStart(2, '0')}`;
+  }
+
+  function loadVocab() {
+    try {
+      known = new Set(JSON.parse(localStorage.getItem(LS_KNOWN) || '[]'));
+      learning = new Set(JSON.parse(localStorage.getItem(LS_LEARN) || '[]'));
+    } catch (_) {
+      known = new Set();
+      learning = new Set();
+    }
+  }
+
+  function saveVocab() {
+    try {
+      localStorage.setItem(LS_KNOWN, JSON.stringify([...known]));
+      localStorage.setItem(LS_LEARN, JSON.stringify([...learning]));
+    } catch (_) {}
+    updateVocabBadge();
+  }
+
+  function markKnown(term) {
+    const t = String(term).toLowerCase();
+    known.add(t);
+    learning.delete(t);
+    saveVocab();
+  }
+
+  function markLearning(term) {
+    const t = String(term).toLowerCase();
+    learning.add(t);
+    known.delete(t);
+    saveVocab();
+  }
+
+  function updateVocabBadge() {
+    const el = $('#vocab-badge');
+    if (el) el.textContent = String(learning.size + known.size);
   }
 
   function prepareQuestion(q, shuffleOpts) {
@@ -112,6 +162,154 @@
     return state.queue[state.index];
   }
 
+  /** Find glossary hits in text; returns [{start,end,term,ru}] non-overlapping, longest-first */
+  function findHits(text) {
+    const lower = text.toLowerCase();
+    const taken = new Array(text.length).fill(false);
+    const hits = [];
+
+    function tryMatch(term) {
+      const t = term.toLowerCase();
+      let from = 0;
+      while (from < lower.length) {
+        const i = lower.indexOf(t, from);
+        if (i < 0) break;
+        const end = i + t.length;
+        // word boundary for single words; phrases already have spaces
+        const leftOk = i === 0 || !/[A-Za-z]/.test(lower[i - 1]);
+        const rightOk = end >= lower.length || !/[A-Za-z]/.test(lower[end]);
+        let free = true;
+        for (let k = i; k < end; k++) if (taken[k]) { free = false; break; }
+        if (leftOk && rightOk && free) {
+          for (let k = i; k < end; k++) taken[k] = true;
+          hits.push({ start: i, end, term: t, ru: GLOSSARY[t] });
+        }
+        from = i + 1;
+      }
+    }
+
+    for (const p of PHRASE_LIST) tryMatch(p);
+    for (const w of WORD_SET) tryMatch(w);
+
+    hits.sort((a, b) => a.start - b.start);
+    return hits;
+  }
+
+  /** Key terms for a question (for post-answer chips) */
+  function keyTermsFor(item) {
+    const texts = [item.q.q, ...item.opts.map((o) => o.t)];
+    const seen = new Map();
+    texts.forEach((t) => {
+      findHits(t).forEach((h) => {
+        if (!seen.has(h.term)) seen.set(h.term, h.ru);
+      });
+    });
+    // Prefer learning + unknown; limit chips
+    const all = [...seen.entries()].map(([term, ru]) => ({ term, ru }));
+    all.sort((a, b) => {
+      const rank = (t) => (learning.has(t) ? 0 : known.has(t) ? 2 : 1);
+      return rank(a.term) - rank(b.term) || b.term.length - a.term.length;
+    });
+    return all.slice(0, 8);
+  }
+
+  function renderTappable(text, allowTap) {
+    const hits = allowTap ? findHits(text) : [];
+    // Filter: known words are plain (not tappable)
+    const active = hits.filter((h) => !known.has(h.term));
+    if (!active.length) {
+      const span = document.createElement('span');
+      span.textContent = text;
+      return span;
+    }
+    const frag = document.createDocumentFragment();
+    let pos = 0;
+    active.forEach((h) => {
+      if (h.start > pos) {
+        frag.appendChild(document.createTextNode(text.slice(pos, h.start)));
+      }
+      const s = document.createElement('span');
+      s.className = 'tap-word';
+      s.dataset.term = h.term;
+      s.textContent = text.slice(h.start, h.end);
+      s.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openGloss(h.term, h.ru);
+      });
+      frag.appendChild(s);
+      pos = h.end;
+    });
+    if (pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+    return frag;
+  }
+
+  function openGloss(term, ru) {
+    glossCurrent = { term, ru };
+    $('#gloss-term').textContent = term;
+    $('#gloss-ru').textContent = ru || '—';
+    $('#gloss-pop').classList.remove('hidden');
+  }
+
+  function closeGloss() {
+    $('#gloss-pop').classList.add('hidden');
+    glossCurrent = null;
+    // Re-render current question text so known words lose underline
+    const item = current();
+    if (item && !$('#screen-quiz').classList.contains('hidden')) {
+      refreshTaps(item);
+      if (item.answered) renderTermChips(item);
+    }
+  }
+
+  function refreshTaps(item) {
+    const qEl = $('#q-text');
+    qEl.innerHTML = '';
+    qEl.appendChild(renderTappable(item.q.q, true));
+
+    $$('#opts .opt').forEach((btn, idx) => {
+      const enText = btn.querySelector('.en-text');
+      if (!enText || !item.opts[idx]) return;
+      enText.innerHTML = '';
+      enText.appendChild(renderTappable(item.opts[idx].t, true));
+    });
+  }
+
+  function renderTermChips(item) {
+    const wrap = $('#term-mark');
+    const chips = $('#term-chips');
+    const terms = keyTermsFor(item);
+    chips.innerHTML = '';
+    if (!terms.length) {
+      wrap.classList.add('hidden');
+      return;
+    }
+    wrap.classList.remove('hidden');
+    terms.forEach(({ term, ru }) => {
+      const div = document.createElement('div');
+      const isK = known.has(term);
+      const isL = learning.has(term);
+      div.className = 'term-chip' + (isK ? ' known' : isL ? ' learning' : '');
+      div.innerHTML =
+        `<span class="tw"></span><span class="tr"></span>` +
+        `<div class="acts"><button type="button" class="y">Знаю</button>` +
+        `<button type="button" class="n">Не знаю</button></div>`;
+      div.querySelector('.tw').textContent = term;
+      div.querySelector('.tr').textContent = ru || '';
+      div.querySelector('.y').addEventListener('click', () => {
+        markKnown(term);
+        renderTermChips(item);
+        refreshTaps(item);
+      });
+      div.querySelector('.n').addEventListener('click', () => {
+        markLearning(term);
+        renderTermChips(item);
+        refreshTaps(item);
+      });
+      chips.appendChild(div);
+    });
+  }
+
   function renderQuestion() {
     const item = current();
     if (!item) {
@@ -130,7 +328,10 @@
     const q = item.q;
     $('#q-num').textContent =
       (state.mode === 'exam' ? 'Экзамен' : 'Практика') + ` · #${q.id}`;
-    $('#q-text').textContent = q.q;
+
+    const qEl = $('#q-text');
+    qEl.innerHTML = '';
+    qEl.appendChild(renderTappable(q.q, true));
 
     const imgWrap = $('#q-img-wrap');
     imgWrap.innerHTML = '';
@@ -156,10 +357,14 @@
       btn.innerHTML =
         `<span class="en"><span class="letter">${LETTERS[idx]}</span><span class="en-text"></span></span>` +
         `<span class="ru"></span>`;
-      btn.querySelector('.en-text').textContent = o.t;
+      btn.querySelector('.en-text').appendChild(renderTappable(o.t, true));
       btn.querySelector('.ru').textContent = o.tr || '';
       if (!item.answered) {
-        btn.addEventListener('click', () => onPick(idx));
+        btn.addEventListener('click', (e) => {
+          // Ignore if tap was on a gloss word
+          if (e.target.closest && e.target.closest('.tap-word')) return;
+          onPick(idx);
+        });
       }
       optsEl.appendChild(btn);
     });
@@ -170,6 +375,8 @@
     const ru = $('#ru-block');
     ru.className = 'ru-block';
     $('#ru-q').textContent = '';
+    $('#term-mark').classList.add('hidden');
+    $('#term-chips').innerHTML = '';
 
     const nextBtn = $('#btn-next');
     nextBtn.classList.add('hidden');
@@ -219,6 +426,8 @@
     ru.className = 'ru-block show';
     $('#ru-q').textContent = item.q.qr || '';
 
+    renderTermChips(item);
+
     $('#btn-next').classList.remove('hidden');
     if (animate) {
       // slight pause feel
@@ -237,7 +446,6 @@
   function finishQuiz(timeUp) {
     stopTimer();
     const total = state.queue.length;
-    // auto-mark unanswered as wrong for exam timeout
     while (state.answers.length < total && state.mode === 'exam' && timeUp) {
       const i = state.answers.length;
       const item = state.queue[i];
@@ -315,6 +523,7 @@
     $('#rule-pass').textContent = m.rules.pass;
     $('#rule-min').textContent = m.rules.minutes;
     $('#rule-bank').textContent = m.count;
+    updateVocabBadge();
   }
 
   function renderTopics() {
@@ -336,6 +545,94 @@
     });
   }
 
+  function renderVocabScreen() {
+    const totalGloss = Object.keys(GLOSSARY).length;
+    const stats = $('#vocab-stats');
+    stats.innerHTML =
+      `<div class="vocab-stat"><b>${known.size}</b><span>знаю</span></div>` +
+      `<div class="vocab-stat"><b>${learning.size}</b><span>учу</span></div>` +
+      `<div class="vocab-stat"><b>${totalGloss}</b><span>в глоссарии</span></div>`;
+
+    $$('.vocab-tab').forEach((t) => {
+      t.classList.toggle('active', t.dataset.tab === vocabTab);
+    });
+
+    const list = $('#vocab-list');
+    list.innerHTML = '';
+    const terms = vocabTab === 'known' ? [...known] : [...learning];
+    terms.sort();
+    if (!terms.length) {
+      list.innerHTML =
+        '<p class="note">' +
+        (vocabTab === 'known'
+          ? 'Пока нет известных слов. Отмечайте «Знаю» после ответа или в карточке перевода.'
+          : 'Пока пусто. Тапайте слова в вопросах и жмите «Не знаю», либо отмечайте чипы после ответа.') +
+        '</p>';
+      return;
+    }
+    terms.forEach((term) => {
+      const ru = GLOSSARY[term] || '—';
+      const div = document.createElement('div');
+      div.className = 'vocab-item';
+      div.innerHTML =
+        `<div><div class="en"></div><div class="ru"></div></div>` +
+        `<div class="meta"><button type="button"></button></div>`;
+      div.querySelector('.en').textContent = term;
+      div.querySelector('.ru').textContent = ru;
+      const btn = div.querySelector('button');
+      if (vocabTab === 'known') {
+        btn.textContent = '→ Учу';
+        btn.addEventListener('click', () => {
+          markLearning(term);
+          renderVocabScreen();
+        });
+      } else {
+        btn.textContent = '✓ Знаю';
+        btn.addEventListener('click', () => {
+          markKnown(term);
+          renderVocabScreen();
+        });
+      }
+      list.appendChild(div);
+    });
+  }
+
+  function startFlashcards() {
+    flashQueue = [...learning].filter((t) => GLOSSARY[t]);
+    if (!flashQueue.length) {
+      // fallback: sample unknown from glossary
+      const pool = Object.keys(GLOSSARY).filter((t) => !known.has(t) && t.indexOf(' ') === -1);
+      flashQueue = shuffle(pool).slice(0, 30);
+    } else {
+      flashQueue = shuffle(flashQueue);
+    }
+    if (!flashQueue.length) {
+      alert('Нет слов для карточек. Отметьте «Не знаю» в вопросах.');
+      return;
+    }
+    flashIdx = 0;
+    flashRevealed = false;
+    show('screen-flash');
+    renderFlash();
+  }
+
+  function renderFlash() {
+    if (flashIdx >= flashQueue.length) {
+      alert('Карточки закончились.');
+      show('screen-vocab');
+      renderVocabScreen();
+      return;
+    }
+    const term = flashQueue[flashIdx];
+    $('#flash-en').textContent = term;
+    $('#flash-ru').textContent = GLOSSARY[term] || '—';
+    $('#flash-ru').classList.toggle('hidden', !flashRevealed);
+    $('#flash-hint').textContent = flashRevealed
+      ? 'Отметьте: знаете или ещё учите'
+      : 'Тапните карточку, чтобы увидеть перевод';
+    $('#flash-progress').textContent = `${flashIdx + 1} / ${flashQueue.length}`;
+  }
+
   function bind() {
     $('#btn-exam').addEventListener('click', startExam);
     $('#btn-practice').addEventListener('click', () => {
@@ -355,13 +652,82 @@
       else startPractice(state.topicId || 'all');
     });
     $('#btn-home').addEventListener('click', () => show('screen-home'));
+
+    $('#btn-vocab').addEventListener('click', () => {
+      show('screen-vocab');
+      renderVocabScreen();
+    });
+    $('#btn-vocab-back').addEventListener('click', () => show('screen-home'));
+    $$('.vocab-tab').forEach((t) => {
+      t.addEventListener('click', () => {
+        vocabTab = t.dataset.tab;
+        renderVocabScreen();
+      });
+    });
+    $('#btn-flashcards').addEventListener('click', startFlashcards);
+    $('#btn-flash-back').addEventListener('click', () => {
+      show('screen-vocab');
+      renderVocabScreen();
+    });
+    $('#flash-card').addEventListener('click', () => {
+      flashRevealed = true;
+      renderFlash();
+    });
+    $('#btn-flash-yes').addEventListener('click', () => {
+      const term = flashQueue[flashIdx];
+      if (term) markKnown(term);
+      flashIdx += 1;
+      flashRevealed = false;
+      renderFlash();
+    });
+    $('#btn-flash-no').addEventListener('click', () => {
+      const term = flashQueue[flashIdx];
+      if (term) markLearning(term);
+      flashIdx += 1;
+      flashRevealed = false;
+      renderFlash();
+    });
+
+    $('#gloss-close').addEventListener('click', closeGloss);
+    $('#gloss-pop').addEventListener('click', (e) => {
+      if (e.target === $('#gloss-pop')) closeGloss();
+    });
+    $('#gloss-yes').addEventListener('click', () => {
+      if (glossCurrent) markKnown(glossCurrent.term);
+      closeGloss();
+    });
+    $('#gloss-no').addEventListener('click', () => {
+      if (glossCurrent) markLearning(glossCurrent.term);
+      closeGloss();
+    });
+  }
+
+  function indexGlossary(raw) {
+    GLOSSARY = {};
+    Object.keys(raw).forEach((k) => {
+      GLOSSARY[String(k).toLowerCase()] = raw[k];
+    });
+    const keys = Object.keys(GLOSSARY);
+    PHRASE_LIST = keys
+      .filter((k) => k.indexOf(' ') >= 0 || k.indexOf('-') >= 0)
+      .sort((a, b) => b.length - a.length);
+    WORD_SET = new Set(keys.filter((k) => k.indexOf(' ') < 0));
   }
 
   async function boot() {
+    loadVocab();
     try {
-      const res = await fetch('questions.json', { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      DATA = await res.json();
+      const [qRes, gRes] = await Promise.all([
+        fetch('questions.json', { cache: 'no-store' }),
+        fetch('glossary.json', { cache: 'no-store' }),
+      ]);
+      if (!qRes.ok) throw new Error('HTTP ' + qRes.status);
+      DATA = await qRes.json();
+      if (gRes.ok) {
+        indexGlossary(await gRes.json());
+      } else {
+        indexGlossary({});
+      }
     } catch (e) {
       document.body.innerHTML =
         '<div class="app"><div class="card"><h2>Не удалось загрузить вопросы</h2><p>' +

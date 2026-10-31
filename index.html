@@ -20,7 +20,7 @@
       </div>
       <div class="card">
         <h2>Тренировка как на экзамене</h2>
-        <p>Вопросы на английском. Русский перевод и правильный ответ появляются <b>только после вашего выбора</b>.</p>
+        <p>Вопросы на английском. Русский перевод и правильный ответ появляются <b>только после вашего выбора</b>. Незнакомые дорожные слова можно тапнуть — короткий перевод.</p>
         <div class="rules">
           <div class="rule"><b id="rule-q">40</b><span>вопросов за сессию</span></div>
           <div class="rule"><b id="rule-pass">30</b><span>минимум для сдачи</span></div>
@@ -32,8 +32,9 @@
       <div class="stack">
         <button type="button" class="btn" id="btn-exam">Начать экзамен</button>
         <button type="button" class="btn secondary" id="btn-practice">Практика по темам</button>
+        <button type="button" class="btn ghost" id="btn-vocab">Словарь <span class="badge-inline" id="vocab-badge">0</span></button>
       </div>
-      <p class="note">Каждый экзамен — новые случайные 40 из всего банка, варианты ответов перемешиваются.</p>
+      <p class="note">Каждый экзамен — новые случайные 40 из всего банка, варианты ответов перемешиваются. Слова «Знаю» / «Не знаю» хранятся на телефоне.</p>
     </section>
 
     <!-- TOPICS -->
@@ -47,6 +48,44 @@
         <p>Все вопросы темы в случайном порядке. Русский — только после ответа. Без таймера.</p>
       </div>
       <div class="topic-list" id="topic-list"></div>
+    </section>
+
+    <!-- VOCAB -->
+    <section id="screen-vocab" class="screen hidden">
+      <div class="header">
+        <h1>Словарь</h1>
+        <button type="button" class="btn ghost" id="btn-vocab-back" style="width:auto;padding:8px 12px;min-height:36px">Назад</button>
+      </div>
+      <div class="card">
+        <div class="vocab-stats" id="vocab-stats"></div>
+        <p class="note" style="margin-top:8px">Тапайте подчёркнутые слова в вопросах — короткий перевод. После ответа отметьте «Знаю» / «Не знаю». Известные слова больше не подчёркиваются.</p>
+      </div>
+      <div class="row" style="margin-bottom:10px">
+        <button type="button" class="btn secondary" id="btn-flashcards" style="min-height:44px">Карточки (учу)</button>
+      </div>
+      <div class="vocab-tabs">
+        <button type="button" class="vocab-tab active" data-tab="learning">Учу</button>
+        <button type="button" class="vocab-tab" data-tab="known">Знаю</button>
+      </div>
+      <div class="vocab-list" id="vocab-list"></div>
+    </section>
+
+    <!-- FLASHCARDS -->
+    <section id="screen-flash" class="screen hidden">
+      <div class="header">
+        <h1>Карточки</h1>
+        <button type="button" class="btn ghost" id="btn-flash-back" style="width:auto;padding:8px 12px;min-height:36px">Назад</button>
+      </div>
+      <div class="card flash-card" id="flash-card">
+        <div class="flash-en" id="flash-en">—</div>
+        <div class="flash-ru hidden" id="flash-ru">—</div>
+        <p class="note" id="flash-hint">Тапните карточку, чтобы увидеть перевод</p>
+      </div>
+      <div class="row">
+        <button type="button" class="btn bad" id="btn-flash-no" style="min-height:48px">Не знаю</button>
+        <button type="button" class="btn good" id="btn-flash-yes" style="min-height:48px">Знаю</button>
+      </div>
+      <p class="note" id="flash-progress" style="text-align:center"></p>
     </section>
 
     <!-- QUIZ -->
@@ -72,6 +111,10 @@
           <div class="label">Перевод вопроса</div>
           <div class="text" id="ru-q"></div>
         </div>
+        <div class="term-mark hidden" id="term-mark">
+          <div class="label">Слова из вопроса</div>
+          <div class="term-chips" id="term-chips"></div>
+        </div>
       </div>
       <div class="footer-actions">
         <button type="button" class="btn hidden" id="btn-next">Далее</button>
@@ -96,6 +139,20 @@
       <div class="wrong-list" id="wrong-list"></div>
     </section>
   </div>
+
+  <!-- Gloss popup -->
+  <div id="gloss-pop" class="gloss-pop hidden" role="dialog" aria-live="polite">
+    <div class="gloss-inner">
+      <div class="gloss-term" id="gloss-term"></div>
+      <div class="gloss-ru" id="gloss-ru"></div>
+      <div class="gloss-actions row">
+        <button type="button" class="btn bad" id="gloss-no" style="min-height:40px;font-size:0.9rem">Не знаю</button>
+        <button type="button" class="btn good" id="gloss-yes" style="min-height:40px;font-size:0.9rem">Знаю</button>
+      </div>
+      <button type="button" class="btn ghost" id="gloss-close" style="min-height:36px;margin-top:6px;font-size:0.85rem">Закрыть</button>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

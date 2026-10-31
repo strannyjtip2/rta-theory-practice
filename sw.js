@@ -1,10 +1,11 @@
-const CACHE = 'rta-theory-v1';
+const CACHE = 'rta-theory-v2-vocab';
 const CORE = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './questions.json',
+  './glossary.json',
   './manifest.webmanifest'
 ];
 

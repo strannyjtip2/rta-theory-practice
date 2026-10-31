@@ -156,3 +156,103 @@ button, select { font: inherit; }
 .note { font-size: 0.78rem; color: var(--muted); margin-top: 10px; }
 .hidden { display: none !important; }
 .screen { flex: 1; display: flex; flex-direction: column; }
+
+/* —— Vocabulary / tap-translate —— */
+.tap-word {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: rgba(59, 130, 246, 0.55);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.tap-word:active, .tap-word.active {
+  background: rgba(59, 130, 246, 0.25);
+}
+.opt .tap-word { text-decoration-color: rgba(147, 197, 253, 0.5); }
+
+.gloss-pop {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 14px 14px calc(14px + var(--safe-b));
+}
+.gloss-pop.hidden { display: none !important; }
+.gloss-inner {
+  width: 100%; max-width: 560px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 16px;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.4);
+}
+.gloss-term {
+  font-size: 1.15rem; font-weight: 700; margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+.gloss-ru { color: var(--ru); font-size: 1rem; margin-bottom: 12px; }
+
+.term-mark { margin-top: 12px; }
+.term-mark .label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin-bottom: 8px;
+}
+.term-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.term-chip {
+  display: inline-flex; flex-direction: column; gap: 4px;
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 10px; max-width: 100%;
+}
+.term-chip .tw { font-weight: 600; font-size: 0.9rem; }
+.term-chip .tr { color: var(--ru); font-size: 0.78rem; }
+.term-chip .acts { display: flex; gap: 4px; }
+.term-chip .acts button {
+  border: none; border-radius: 8px; padding: 4px 8px; font-size: 0.75rem;
+  font-weight: 600; cursor: pointer; color: #fff;
+}
+.term-chip .acts .y { background: var(--good); }
+.term-chip .acts .n { background: var(--card); border: 1px solid var(--border) !important; color: var(--muted) !important; }
+.term-chip.known { opacity: 0.55; border-color: var(--good); }
+.term-chip.learning { border-color: var(--warn); }
+
+.badge-inline {
+  display: inline-block; margin-left: 6px; font-size: 0.75rem;
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 1px 8px; color: var(--muted); font-weight: 500;
+}
+
+.vocab-stats {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+}
+.vocab-stat {
+  background: var(--card2); border-radius: 10px; padding: 10px; text-align: center;
+}
+.vocab-stat b { display: block; font-size: 1.2rem; }
+.vocab-stat span { font-size: 0.72rem; color: var(--muted); }
+
+.vocab-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.vocab-tab {
+  flex: 1; min-height: 40px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--card2); color: var(--muted); font-weight: 600; cursor: pointer;
+}
+.vocab-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.vocab-list { display: flex; flex-direction: column; gap: 6px; flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; }
+.vocab-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px;
+}
+.vocab-item .en { font-weight: 600; }
+.vocab-item .ru { color: var(--ru); font-size: 0.85rem; }
+.vocab-item .meta { text-align: right; }
+.vocab-item button {
+  border: 1px solid var(--border); background: var(--card2); color: var(--muted);
+  border-radius: 8px; padding: 4px 8px; font-size: 0.75rem; cursor: pointer;
+}
+
+.flash-card {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; min-height: 220px; cursor: pointer; user-select: none;
+}
+.flash-en { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; }
+.flash-ru { font-size: 1.2rem; color: var(--ru); }
+.flash-ru.hidden { display: none; }
