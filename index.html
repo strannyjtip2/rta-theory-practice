@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1419" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>RTA Dubai — Теория (практика)</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+</head>
+<body>
+  <div class="app">
+    <!-- HOME -->
+    <section id="screen-home" class="screen">
+      <div class="header">
+        <h1>RTA Dubai · Теория</h1>
+        <span class="badge" id="home-count">…</span>
+      </div>
+      <div class="card">
+        <h2>Тренировка как на экзамене</h2>
+        <p>Вопросы на английском. Русский перевод и правильный ответ появляются <b>только после вашего выбора</b>.</p>
+        <div class="rules">
+          <div class="rule"><b id="rule-q">40</b><span>вопросов за сессию</span></div>
+          <div class="rule"><b id="rule-pass">30</b><span>минимум для сдачи</span></div>
+          <div class="rule"><b id="rule-min">30</b><span>минут на экзамен</span></div>
+          <div class="rule"><b id="rule-bank">1135</b><span>в банке</span></div>
+        </div>
+        <p class="note">По правилам RTA Knowledge Test: 40 вопросов, нужно ≥30 верных (официальный FAQ rta.ae). Таймер 30 мин — как в распространённых тренажёрах; на странице RTA лимит времени не указан. Банк неофициальный.</p>
+      </div>
+      <div class="stack">
+        <button type="button" class="btn" id="btn-exam">Начать экзамен</button>
+        <button type="button" class="btn secondary" id="btn-practice">Практика по темам</button>
+      </div>
+      <p class="note">Каждый экзамен — новые случайные 40 из всего банка, варианты ответов перемешиваются.</p>
+    </section>
+
+    <!-- TOPICS -->
+    <section id="screen-topics" class="screen hidden">
+      <div class="header">
+        <h1>Практика</h1>
+        <button type="button" class="btn ghost" id="btn-topics-back" style="width:auto;padding:8px 12px;min-height:36px">Назад</button>
+      </div>
+      <div class="card">
+        <h2>Выберите тему</h2>
+        <p>Все вопросы темы в случайном порядке. Русский — только после ответа. Без таймера.</p>
+      </div>
+      <div class="topic-list" id="topic-list"></div>
+    </section>
+
+    <!-- QUIZ -->
+    <section id="screen-quiz" class="screen hidden">
+      <div class="header">
+        <h1>Вопрос</h1>
+        <span class="badge timer" id="quiz-timer">—</span>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-meta">
+          <span id="progress-label">—</span>
+          <button type="button" class="btn ghost" id="btn-quit" style="width:auto;min-height:32px;padding:4px 10px;font-size:0.8rem">Выйти</button>
+        </div>
+        <div class="progress-bar"><i id="progress-fill"></i></div>
+      </div>
+      <div class="card" style="flex:1">
+        <div class="q-num" id="q-num"></div>
+        <p class="q-text" id="q-text"></p>
+        <div id="q-img-wrap"></div>
+        <div class="opts" id="opts"></div>
+        <div class="feedback" id="feedback"></div>
+        <div class="ru-block" id="ru-block">
+          <div class="label">Перевод вопроса</div>
+          <div class="text" id="ru-q"></div>
+        </div>
+      </div>
+      <div class="footer-actions">
+        <button type="button" class="btn hidden" id="btn-next">Далее</button>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section id="screen-result" class="screen hidden">
+      <div class="header">
+        <h1>Результат</h1>
+      </div>
+      <div class="card result-score">
+        <div class="big" id="result-big">0 / 40</div>
+        <div class="verdict" id="result-verdict">—</div>
+        <p id="result-sub" class="note"></p>
+      </div>
+      <div class="stack" style="margin-bottom:12px">
+        <button type="button" class="btn" id="btn-again">Ещё раз</button>
+        <button type="button" class="btn secondary" id="btn-home">На главную</button>
+      </div>
+      <h2 style="font-size:1rem;margin:8px 0">Разбор ошибок</h2>
+      <div class="wrong-list" id="wrong-list"></div>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
