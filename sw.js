@@ -1,4 +1,4 @@
-const CACHE = 'rta-theory-v4-diagrams';
+const CACHE = 'rta-theory-v5-gloss3k';
 const CORE = [
   './',
   './index.html',
