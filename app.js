@@ -6,6 +6,7 @@
   const LS_KNOWN = 'rta-vocab-known-v1';
   const LS_LEARN = 'rta-vocab-learning-v1';
   const LS_PROGRESS = 'rta-q-progress-v1'; // qid -> 'correct' | 'wrong'
+  const LS_PROGRESS_TS = 'rta-q-progress-ts-v1'; // qid -> last answer time (ms)
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
@@ -16,6 +17,7 @@
   let known = new Set();
   let learning = new Set();
   let qProgress = {}; // qid(str) -> 'correct' | 'wrong'
+  let qTs = {}; // qid(str) -> ms of last answer
   let practiceFilter = 'all'; // 'all' | 'wrong' | 'unseen'
   let glossCurrent = null; // {term, ru}
   let vocabTab = 'learning';
@@ -105,20 +107,25 @@
     try {
       const raw = JSON.parse(localStorage.getItem(LS_PROGRESS) || '{}');
       qProgress = raw && typeof raw === 'object' ? raw : {};
+      const t = JSON.parse(localStorage.getItem(LS_PROGRESS_TS) || '{}');
+      qTs = t && typeof t === 'object' ? t : {};
     } catch (_) {
       qProgress = {};
+      qTs = {};
     }
   }
 
   function saveProgress() {
     try {
       localStorage.setItem(LS_PROGRESS, JSON.stringify(qProgress));
+      localStorage.setItem(LS_PROGRESS_TS, JSON.stringify(qTs));
     } catch (_) {}
     updateProgressUI();
   }
 
   function recordAnswer(qid, ok) {
     const key = String(qid);
+    qTs[key] = Date.now();
     if (ok) {
       qProgress[key] = 'correct'; // clears from error list
     } else {
@@ -892,6 +899,129 @@
     WORD_SET = new Set(keys.filter((k) => k.indexOf(' ') < 0));
   }
 
+  // ---------- Progress transfer via link ----------
+  const T = window.RTATransfer;
+  let pendingImport = null;
+
+  function baseUrl() {
+    return location.origin + location.pathname;
+  }
+
+  function refreshAfterImport() {
+    loadVocab();
+    loadProgress();
+    updateVocabBadge();
+    updateProgressUI();
+    renderHome();
+  }
+
+  async function doExport() {
+    const box = $('#export-box');
+    const ta = $('#export-link');
+    const note = $('#export-note');
+    try {
+      const { url, state: st } = await T.buildLink(localStorage, baseUrl());
+      ta.value = url;
+      box.classList.remove('hidden');
+      const nq = Object.keys(st.prog).length;
+      note.textContent =
+        `В ссылке: вопросов ${nq}, слов «знаю» ${st.known.length}, «учу» ${st.learning.length}. ` +
+        `Длина ${url.length} симв. Данные после # не отправляются на сервер — всё внутри ссылки; не публикуйте её открыто.`;
+      $('#btn-share').classList.toggle('hidden', !navigator.share);
+      ta.focus();
+      ta.select();
+    } catch (e) {
+      alert('Не удалось создать ссылку: ' + e);
+    }
+  }
+
+  async function copyLink() {
+    const ta = $('#export-link');
+    const text = ta.value;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      ta.focus();
+      ta.select();
+      try { document.execCommand('copy'); } catch (__) {}
+    }
+    const b = $('#btn-copy');
+    const old = b.textContent;
+    b.textContent = 'Скопировано ✓';
+    setTimeout(() => (b.textContent = old), 1800);
+  }
+
+  async function shareLink() {
+    const url = $('#export-link').value;
+    try {
+      await navigator.share({ title: 'Прогресс RTA', text: 'Мой прогресс RTA Dubai Theory:', url });
+    } catch (_) {}
+  }
+
+  function clearHash() {
+    try {
+      history.replaceState(null, '', location.pathname + location.search);
+    } catch (_) {
+      location.hash = '';
+    }
+  }
+
+  async function checkImportHash() {
+    const h = location.hash;
+    if (!/^#?import=/.test(h)) return;
+    let inc;
+    try {
+      inc = await T.parseHash(h);
+    } catch (e) {
+      clearHash();
+      alert('Ссылка с прогрессом повреждена или обрезана (скопируйте её целиком).');
+      return;
+    }
+    clearHash();
+    if (!inc) return;
+    pendingImport = inc;
+    const nq = Object.keys(inc.prog).length;
+    const nw = Object.values(inc.prog).filter((v) => v === 'wrong').length;
+    $('#import-summary').textContent =
+      `Вопросов: ${nq} (ошибок ${nw}), слов «знаю»: ${inc.known.length}, «учу»: ${inc.learning.length}.`;
+    $('#import-pop').classList.remove('hidden');
+  }
+
+  function applyImport(mode) {
+    const inc = pendingImport;
+    pendingImport = null;
+    $('#import-pop').classList.add('hidden');
+    if (!inc) return;
+    try {
+      if (mode === 'replace') {
+        T.replaceState(localStorage, inc);
+      } else {
+        const merged = T.mergeState(T.readState(localStorage), inc);
+        T.writeState(localStorage, merged);
+      }
+    } catch (e) {
+      alert('Не удалось сохранить прогресс: ' + e);
+      return;
+    }
+    refreshAfterImport();
+    show('screen-home');
+  }
+
+  function bindTransfer() {
+    $('#btn-export').addEventListener('click', doExport);
+    $('#btn-copy').addEventListener('click', copyLink);
+    $('#btn-share').addEventListener('click', shareLink);
+    $('#import-merge').addEventListener('click', () => applyImport('merge'));
+    $('#import-replace').addEventListener('click', () => {
+      if (confirm('Заменить текущий прогресс на этом устройстве? Это нельзя отменить.')) applyImport('replace');
+    });
+    $('#import-cancel').addEventListener('click', () => {
+      pendingImport = null;
+      $('#import-pop').classList.add('hidden');
+    });
+    window.addEventListener('hashchange', checkImportHash);
+  }
+
   async function boot() {
     loadVocab();
     loadProgress();
@@ -915,8 +1045,10 @@
       return;
     }
     bind();
+    bindTransfer();
     renderHome();
     show('screen-home');
+    checkImportHash();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }

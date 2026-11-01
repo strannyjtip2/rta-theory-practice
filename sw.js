@@ -1,9 +1,10 @@
-const CACHE = 'rta-theory-v6-progress-glossfix';
+const CACHE = 'rta-theory-v7-transfer';
 const CORE = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './transfer.js',
   './questions.json',
   './glossary.json',
   './manifest.webmanifest'

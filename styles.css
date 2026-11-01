@@ -324,3 +324,12 @@ button, select { font: inherit; }
   gap: 8px;
   align-items: baseline;
 }
+
+/* Transfer */
+.export-link {
+  width: 100%; box-sizing: border-box; resize: none;
+  background: #0f151c; color: #cfe3ff; border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px; font-size: 0.72rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace; word-break: break-all;
+}
+#transfer-card .hidden, #export-box.hidden, #btn-share.hidden { display: none !important; }

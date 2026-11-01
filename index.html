@@ -45,6 +45,19 @@
         <button type="button" class="btn warn" id="btn-errors">Повторить ошибки <span class="badge-inline" id="errors-badge">0</span></button>
         <button type="button" class="btn ghost" id="btn-vocab">Словарь <span class="badge-inline" id="vocab-badge">0</span></button>
       </div>
+      <div class="card" id="transfer-card">
+        <h2 style="font-size:1rem;margin:0 0 6px">Перенос прогресса</h2>
+        <p class="note" style="margin:0 0 10px">Получите ссылку с вашим прогрессом и словарём, отправьте себе (например, в WhatsApp) и откройте на другом устройстве.</p>
+        <button type="button" class="btn ghost" id="btn-export">Экспорт прогресса (ссылка)</button>
+        <div id="export-box" class="hidden" style="margin-top:10px">
+          <textarea id="export-link" class="export-link" readonly rows="4" aria-label="Ссылка с прогрессом"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button type="button" class="btn secondary" id="btn-copy" style="min-height:42px;font-size:0.9rem">Копировать</button>
+            <button type="button" class="btn secondary hidden" id="btn-share" style="min-height:42px;font-size:0.9rem">Поделиться</button>
+          </div>
+          <p class="note" id="export-note" style="margin:8px 0 0"></p>
+        </div>
+      </div>
       <p class="note">Каждый экзамен — новые случайные 40 из всего банка, варианты ответов перемешиваются. Прогресс вопросов и словарь хранятся на телефоне.</p>
     </section>
 
@@ -169,6 +182,18 @@
     </div>
   </div>
 
+  <div id="import-pop" class="gloss-pop hidden" role="dialog" aria-modal="true">
+    <div class="gloss-inner">
+      <div class="gloss-term">Получен прогресс по ссылке</div>
+      <div class="gloss-ru" id="import-summary"></div>
+      <p class="note" style="margin:0 0 10px">Объединить — добавить к текущему (верные ответы и слова сохраняются, при расхождении побеждает более поздний ответ). Заменить — стереть текущий прогресс на этом устройстве.</p>
+      <button type="button" class="btn" id="import-merge" style="min-height:44px">Объединить</button>
+      <button type="button" class="btn warn" id="import-replace" style="min-height:44px;margin-top:8px">Заменить</button>
+      <button type="button" class="btn ghost" id="import-cancel" style="min-height:40px;margin-top:6px;font-size:0.9rem">Отмена</button>
+    </div>
+  </div>
+
+  <script src="transfer.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
