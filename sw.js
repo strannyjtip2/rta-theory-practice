@@ -1,4 +1,4 @@
-const CACHE = 'rta-theory-v8b-context';
+const CACHE = 'rta-theory-v9-clean';
 const CORE = [
   './',
   './index.html',
@@ -15,15 +15,23 @@ const CORE = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting())
+    caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys().then((keys) => {
+      const old = keys.filter((k) => k !== CACHE);
+      return Promise.all(old.map((k) => caches.delete(k)))
+        .then(() => self.clients.claim())
+        .then(() =>
+          // an older version was running: reload open pages once so they pick up the new code
+          old.length
+            ? self.clients.matchAll({ type: 'window' }).then((cs) => cs.forEach((c) => { try { c.navigate(c.url); } catch (_) {} }))
+            : null
+        );
+    })
   );
 });
 

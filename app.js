@@ -435,7 +435,7 @@
         `<div class="acts"><button type="button" class="y">Знаю</button>` +
         `<button type="button" class="n">Не знаю</button></div>`;
       div.querySelector('.tw').textContent = term;
-      div.querySelector('.tr').textContent = ru || '';
+      div.querySelector('.tr').textContent = safeRu(term, ru);
       div.querySelector('.y').addEventListener('click', () => {
         markKnown(term);
         renderTermChips(item);
@@ -908,10 +908,28 @@
     return true;
   }
 
+  /** one meaning only: cut " / ", ";" and ", " alternatives (outside parentheses) */
+  function oneMeaning(ru) {
+    let s = String(ru || '').trim();
+    let depth = 0;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') depth = Math.max(0, depth - 1);
+      else if (depth === 0) {
+        if (ch === ';' || (ch === ',' && s[i + 1] === ' ') || (ch === '/' && s[i - 1] === ' ' && s[i + 1] === ' ')) {
+          s = s.slice(0, i).trim();
+          break;
+        }
+      }
+    }
+    return s;
+  }
+
   function safeRu(term, ru) {
-    if (isGoodGloss(term, ru)) return String(ru).trim();
+    if (isGoodGloss(term, ru)) return oneMeaning(ru);
     const hit = glossFor(term);
-    if (isGoodGloss(term, hit)) return String(hit).trim();
+    if (isGoodGloss(term, hit)) return oneMeaning(hit);
     return '—';
   }
 
