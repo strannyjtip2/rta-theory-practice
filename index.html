@@ -29,12 +29,23 @@
         </div>
         <p class="note">По правилам RTA Knowledge Test: 40 вопросов, нужно ≥30 верных (официальный FAQ rta.ae). Таймер 30 мин — как в распространённых тренажёрах; на странице RTA лимит времени не указан. Банк неофициальный.</p>
       </div>
+      <div class="card" id="home-progress-card" style="margin-top:0">
+        <h2 style="font-size:1rem;margin:0 0 8px">Ваш прогресс по вопросам</h2>
+        <div class="prog-legend" id="home-progress">
+          <div class="prog-pill ok"><b id="prog-ok">0</b><span>верно</span></div>
+          <div class="prog-pill bad"><b id="prog-bad">0</b><span>ошибки</span></div>
+          <div class="prog-pill dim"><b id="prog-new">0</b><span>не трогали</span></div>
+        </div>
+        <div class="prog-bar" aria-hidden="true"><i id="prog-bar-ok"></i><i id="prog-bar-bad"></i></div>
+        <p class="note" style="margin:8px 0 0">Зелёный — отвечали верно, жёлтый — пока в ошибках, серый — ещё не встречались. Хранится на этом устройстве.</p>
+      </div>
       <div class="stack">
         <button type="button" class="btn" id="btn-exam">Начать экзамен</button>
         <button type="button" class="btn secondary" id="btn-practice">Практика по темам</button>
+        <button type="button" class="btn warn" id="btn-errors">Повторить ошибки <span class="badge-inline" id="errors-badge">0</span></button>
         <button type="button" class="btn ghost" id="btn-vocab">Словарь <span class="badge-inline" id="vocab-badge">0</span></button>
       </div>
-      <p class="note">Каждый экзамен — новые случайные 40 из всего банка, варианты ответов перемешиваются. Слова «Знаю» / «Не знаю» хранятся на телефоне.</p>
+      <p class="note">Каждый экзамен — новые случайные 40 из всего банка, варианты ответов перемешиваются. Прогресс вопросов и словарь хранятся на телефоне.</p>
     </section>
 
     <!-- TOPICS -->
@@ -45,7 +56,12 @@
       </div>
       <div class="card">
         <h2>Выберите тему</h2>
-        <p>Все вопросы темы в случайном порядке. Русский — только после ответа. Без таймера.</p>
+        <p>Вопросы в случайном порядке. Русский — только после ответа. Без таймера.</p>
+        <div class="filter-row" id="practice-filters" role="tablist" aria-label="Фильтр вопросов">
+          <button type="button" class="filter-chip active" data-filter="all">Все</button>
+          <button type="button" class="filter-chip" data-filter="wrong">Только ошибки</button>
+          <button type="button" class="filter-chip" data-filter="unseen">Только новые</button>
+        </div>
       </div>
       <div class="topic-list" id="topic-list"></div>
     </section>

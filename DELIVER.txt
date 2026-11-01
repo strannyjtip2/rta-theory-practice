@@ -1,0 +1,5 @@
+DELIVERABLES
+1. Single-file phone app: /workspace/rta-exam-app/RTA-Theory-Practice.html (869KB, full 1135 Q embedded)
+2. Full static site:     /workspace/rta-exam-app/ (index.html + questions.json + img/180 + SW)
+3. Zip:                  /workspace/rta-exam-app.zip
+4. Live tunnel (ephemeral, may 530 from box; try on phone): https://liked-undefined-scsi-hispanic.trycloudflare.com

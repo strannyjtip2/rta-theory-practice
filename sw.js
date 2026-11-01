@@ -1,4 +1,4 @@
-const CACHE = 'rta-theory-v5-gloss3k';
+const CACHE = 'rta-theory-v6-progress-glossfix';
 const CORE = [
   './',
   './index.html',

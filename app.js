@@ -5,6 +5,7 @@
   const LETTERS = 'ABCDEFGH';
   const LS_KNOWN = 'rta-vocab-known-v1';
   const LS_LEARN = 'rta-vocab-learning-v1';
+  const LS_PROGRESS = 'rta-q-progress-v1'; // qid -> 'correct' | 'wrong'
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
@@ -14,6 +15,8 @@
   let WORD_SET = new Set();
   let known = new Set();
   let learning = new Set();
+  let qProgress = {}; // qid(str) -> 'correct' | 'wrong'
+  let practiceFilter = 'all'; // 'all' | 'wrong' | 'unseen'
   let glossCurrent = null; // {term, ru}
   let vocabTab = 'learning';
   let flashQueue = [];
@@ -21,7 +24,7 @@
   let flashRevealed = false;
 
   let state = {
-    mode: null, // 'exam' | 'practice'
+    mode: null, // 'exam' | 'practice' | 'errors'
     queue: [],
     index: 0,
     answers: [],
@@ -29,6 +32,7 @@
     endsAt: 0,
     timerId: null,
     topicId: null,
+    filter: 'all',
   };
 
   function shuffle(arr) {
@@ -97,6 +101,70 @@
     if (el) el.textContent = String(learning.size + known.size);
   }
 
+  function loadProgress() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_PROGRESS) || '{}');
+      qProgress = raw && typeof raw === 'object' ? raw : {};
+    } catch (_) {
+      qProgress = {};
+    }
+  }
+
+  function saveProgress() {
+    try {
+      localStorage.setItem(LS_PROGRESS, JSON.stringify(qProgress));
+    } catch (_) {}
+    updateProgressUI();
+  }
+
+  function recordAnswer(qid, ok) {
+    const key = String(qid);
+    if (ok) {
+      qProgress[key] = 'correct'; // clears from error list
+    } else {
+      // keep as wrong until answered correctly later
+      qProgress[key] = 'wrong';
+    }
+    saveProgress();
+  }
+
+  function progressCounts(pool) {
+    let ok = 0, bad = 0, neu = 0;
+    (pool || DATA.questions).forEach((q) => {
+      const st = qProgress[String(q.id)];
+      if (st === 'correct') ok += 1;
+      else if (st === 'wrong') bad += 1;
+      else neu += 1;
+    });
+    return { ok, bad, neu, total: ok + bad + neu };
+  }
+
+  function updateProgressUI() {
+    if (!DATA) return;
+    const c = progressCounts(DATA.questions);
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(v);
+    };
+    set('prog-ok', c.ok);
+    set('prog-bad', c.bad);
+    set('prog-new', c.neu);
+    set('errors-badge', c.bad);
+    const barOk = document.getElementById('prog-bar-ok');
+    const barBad = document.getElementById('prog-bar-bad');
+    if (barOk && barBad && c.total) {
+      barOk.style.width = ((c.ok / c.total) * 100).toFixed(2) + '%';
+      barBad.style.width = ((c.bad / c.total) * 100).toFixed(2) + '%';
+    }
+  }
+
+  function filterPool(pool, filter) {
+    const f = filter || 'all';
+    if (f === 'wrong') return pool.filter((q) => qProgress[String(q.id)] === 'wrong');
+    if (f === 'unseen') return pool.filter((q) => !qProgress[String(q.id)]);
+    return pool;
+  }
+
   function prepareQuestion(q, shuffleOpts) {
     const opts = q.opts.map((o, i) => ({ ...o, _orig: i }));
     const ordered = shuffleOpts ? shuffle(opts) : opts;
@@ -122,18 +190,27 @@
     tickTimer();
   }
 
-  function startPractice(topicId) {
+  function startPractice(topicId, filter) {
     stopTimer();
+    const f = filter || practiceFilter || 'all';
     let pool = DATA.questions;
     if (topicId && topicId !== 'all') {
       pool = pool.filter((q) => q.topic === topicId);
     }
+    pool = filterPool(pool, f);
     if (!pool.length) {
-      alert('В этой теме нет вопросов.');
+      const msg =
+        f === 'wrong'
+          ? 'Нет вопросов с ошибками в этой теме.'
+          : f === 'unseen'
+            ? 'Все вопросы этой темы уже встречались.'
+            : 'В этой теме нет вопросов.';
+      alert(msg);
       return;
     }
     state.mode = 'practice';
     state.topicId = topicId || 'all';
+    state.filter = f;
     state.queue = shuffle(pool).map((q) => prepareQuestion(q, true));
     state.index = 0;
     state.answers = [];
@@ -142,7 +219,31 @@
     show('screen-quiz');
     renderQuestion();
     const timerEl = $('#quiz-timer');
-    timerEl.textContent = 'Практика';
+    const label =
+      f === 'wrong' ? 'Ошибки' : f === 'unseen' ? 'Новые' : 'Практика';
+    timerEl.textContent = label;
+    timerEl.className = 'timer';
+  }
+
+  function startErrorsPractice() {
+    stopTimer();
+    const pool = filterPool(DATA.questions, 'wrong');
+    if (!pool.length) {
+      alert('Пока нет ошибок для повторения. Ответьте неверно в практике или экзамене — вопрос появится здесь.');
+      return;
+    }
+    state.mode = 'errors';
+    state.topicId = 'errors';
+    state.filter = 'wrong';
+    state.queue = shuffle(pool).map((q) => prepareQuestion(q, true));
+    state.index = 0;
+    state.answers = [];
+    state.startedAt = Date.now();
+    state.endsAt = 0;
+    show('screen-quiz');
+    renderQuestion();
+    const timerEl = $('#quiz-timer');
+    timerEl.textContent = 'Ошибки';
     timerEl.className = 'timer';
   }
 
@@ -245,9 +346,10 @@
   }
 
   function openGloss(term, ru) {
-    glossCurrent = { term, ru };
+    const safe = safeRu(term, ru);
+    glossCurrent = { term, ru: safe };
     $('#gloss-term').textContent = term;
-    $('#gloss-ru').textContent = ru || '—';
+    $('#gloss-ru').textContent = safe;
     $('#gloss-pop').classList.remove('hidden');
   }
 
@@ -403,6 +505,7 @@
       opts: item.opts,
       q: item.q,
     });
+    recordAnswer(item.q.id, ok);
     reveal(item, true);
   }
 
@@ -458,6 +561,7 @@
         q: item.q,
         skipped: true,
       });
+      recordAnswer(item.q.id, false);
     }
     const answered = state.answers;
     const correct = answered.filter((a) => a.ok).length;
@@ -524,23 +628,53 @@
     $('#rule-min').textContent = m.rules.minutes;
     $('#rule-bank').textContent = m.count;
     updateVocabBadge();
+    updateProgressUI();
+  }
+
+  function topicProgHtml(pool) {
+    const c = progressCounts(pool);
+    const shown =
+      practiceFilter === 'wrong'
+        ? c.bad
+        : practiceFilter === 'unseen'
+          ? c.neu
+          : c.total;
+    return (
+      `<div class="topic-main"><span></span><span class="n">${shown}${practiceFilter !== 'all' ? ' / ' + c.total : ''}</span></div>` +
+      `<div class="prog-mini"><span class="g">● ${c.ok}</span><span class="y">● ${c.bad}</span><span class="z">● ${c.neu}</span></div>`
+    );
   }
 
   function renderTopics() {
     const list = $('#topic-list');
     list.innerHTML = '';
+    $$('#practice-filters .filter-chip').forEach((chip) => {
+      chip.classList.toggle('active', chip.dataset.filter === practiceFilter);
+    });
+
+    const allPool = filterPool(DATA.questions, practiceFilter);
     const all = document.createElement('button');
     all.type = 'button';
     all.className = 'topic-btn';
-    all.innerHTML = `<span>Все темы (случайно)</span><span class="n">${DATA.meta.count}</span>`;
-    all.addEventListener('click', () => startPractice('all'));
+    const allC = progressCounts(DATA.questions);
+    all.innerHTML =
+      `<div class="topic-main"><span>Все темы (случайно)</span><span class="n">${allPool.length}${practiceFilter !== 'all' ? ' / ' + DATA.meta.count : ''}</span></div>` +
+      `<div class="prog-mini"><span class="g">● ${allC.ok}</span><span class="y">● ${allC.bad}</span><span class="z">● ${allC.neu}</span></div>`;
+    all.addEventListener('click', () => startPractice('all', practiceFilter));
     list.appendChild(all);
+
     DATA.meta.topics.forEach((t) => {
+      const topicQs = DATA.questions.filter((q) => q.topic === t.id);
+      const filtered = filterPool(topicQs, practiceFilter);
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'topic-btn';
-      b.innerHTML = `<span>${escapeHtml(t.ru)}</span><span class="n">${t.n}</span>`;
-      b.addEventListener('click', () => startPractice(t.id));
+      if (!filtered.length && practiceFilter !== 'all') b.disabled = true;
+      const c = progressCounts(topicQs);
+      b.innerHTML =
+        `<div class="topic-main"><span>${escapeHtml(t.ru)}</span><span class="n">${filtered.length}${practiceFilter !== 'all' ? ' / ' + t.n : ''}</span></div>` +
+        `<div class="prog-mini"><span class="g">● ${c.ok}</span><span class="y">● ${c.bad}</span><span class="z">● ${c.neu}</span></div>`;
+      b.addEventListener('click', () => startPractice(t.id, practiceFilter));
       list.appendChild(b);
     });
   }
@@ -571,7 +705,7 @@
       return;
     }
     terms.forEach((term) => {
-      const ru = GLOSSARY[term] || '—';
+      const ru = safeRu(term, GLOSSARY[term]);
       const div = document.createElement('div');
       div.className = 'vocab-item';
       div.innerHTML =
@@ -625,7 +759,7 @@
     }
     const term = flashQueue[flashIdx];
     $('#flash-en').textContent = term;
-    $('#flash-ru').textContent = GLOSSARY[term] || '—';
+    $('#flash-ru').textContent = safeRu(term, GLOSSARY[term]);
     $('#flash-ru').classList.toggle('hidden', !flashRevealed);
     $('#flash-hint').textContent = flashRevealed
       ? 'Отметьте: знаете или ещё учите'
@@ -639,19 +773,35 @@
       renderTopics();
       show('screen-topics');
     });
-    $('#btn-topics-back').addEventListener('click', () => show('screen-home'));
+    const btnErrors = $('#btn-errors');
+    if (btnErrors) btnErrors.addEventListener('click', startErrorsPractice);
+    $$('#practice-filters .filter-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        practiceFilter = chip.dataset.filter || 'all';
+        renderTopics();
+      });
+    });
+    $('#btn-topics-back').addEventListener('click', () => {
+      renderHome();
+      show('screen-home');
+    });
     $('#btn-next').addEventListener('click', nextQuestion);
     $('#btn-quit').addEventListener('click', () => {
-      if (confirm('Выйти из сессии? Прогресс этой попытки не сохранится.')) {
+      if (confirm('Выйти из сессии? Ответы этой попытки уже сохранены в прогрессе; незавершённые вопросы не запишутся.')) {
         stopTimer();
+        renderHome();
         show('screen-home');
       }
     });
     $('#btn-again').addEventListener('click', () => {
       if (state.mode === 'exam') startExam();
-      else startPractice(state.topicId || 'all');
+      else if (state.mode === 'errors') startErrorsPractice();
+      else startPractice(state.topicId || 'all', state.filter || practiceFilter);
     });
-    $('#btn-home').addEventListener('click', () => show('screen-home'));
+    $('#btn-home').addEventListener('click', () => {
+      renderHome();
+      show('screen-home');
+    });
 
     $('#btn-vocab').addEventListener('click', () => {
       show('screen-vocab');
@@ -702,10 +852,38 @@
     });
   }
 
+  function hasCyrillic(s) {
+    return /[а-яА-ЯёЁ]/.test(String(s || ''));
+  }
+
+  function isGoodGloss(term, ru) {
+    if (!ru) return false;
+    const t = String(term || '').trim().toLowerCase();
+    const r = String(ru).trim();
+    if (!r || !t) return false;
+    if (!hasCyrillic(r)) return false;
+    if (r.toLowerCase() === t) return false;
+    // primary segment before / or (latin acronym) must not be bare EN lemma
+    let main = r.split(/\s*\/\s*/)[0];
+    main = main.replace(/\([^)]*\)/g, '').trim();
+    if (main.toLowerCase() === t && !hasCyrillic(main)) return false;
+    return true;
+  }
+
+  function safeRu(term, ru) {
+    if (isGoodGloss(term, ru)) return String(ru).trim();
+    const hit = GLOSSARY[String(term || '').toLowerCase()];
+    if (isGoodGloss(term, hit)) return String(hit).trim();
+    return '—';
+  }
+
   function indexGlossary(raw) {
     GLOSSARY = {};
-    Object.keys(raw).forEach((k) => {
-      GLOSSARY[String(k).toLowerCase()] = raw[k];
+    Object.keys(raw || {}).forEach((k) => {
+      const term = String(k).toLowerCase();
+      const ru = raw[k];
+      if (!isGoodGloss(term, ru)) return; // drop self-translations / empty / non-RU
+      GLOSSARY[term] = String(ru).trim();
     });
     const keys = Object.keys(GLOSSARY);
     PHRASE_LIST = keys
@@ -716,6 +894,7 @@
 
   async function boot() {
     loadVocab();
+    loadProgress();
     try {
       const [qRes, gRes] = await Promise.all([
         fetch('questions.json', { cache: 'no-store' }),
