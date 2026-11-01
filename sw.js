@@ -1,4 +1,4 @@
-const CACHE = 'rta-theory-v3-vocab-rare';
+const CACHE = 'rta-theory-v4-diagrams';
 const CORE = [
   './',
   './index.html',
