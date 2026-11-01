@@ -1,4 +1,4 @@
-const CACHE = 'rta-theory-v8-context';
+const CACHE = 'rta-theory-v8b-context';
 const CORE = [
   './',
   './index.html',
