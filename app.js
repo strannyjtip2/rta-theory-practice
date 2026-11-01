@@ -14,6 +14,10 @@
   let GLOSSARY = {}; // lowercased EN → RU
   let PHRASE_LIST = []; // longest-first phrases for matching
   let WORD_SET = new Set();
+  let CTX = {}; // qid → textIdx → head term → in-context RU gloss ('-' = no underline)
+  let ALIAS = {}; // phrase variant → head phrase
+  let VARIANTS = {}; // head → [variants]
+  let LEGACY = {}; // old glossary entries that were folded away (kept for vocab/flashcards)
   let known = new Set();
   let learning = new Set();
   let qProgress = {}; // qid(str) -> 'correct' | 'wrong'
@@ -84,8 +88,31 @@
     updateVocabBadge();
   }
 
+  /** context text index of an option: 1 + its original (unshuffled) position */
+  function oi(o, idx) {
+    return (typeof o._orig === 'number' ? o._orig : idx) + 1;
+  }
+
+  function dropVariants(t) {
+    (VARIANTS[t] || []).forEach((v) => {
+      known.delete(v);
+      learning.delete(v);
+    });
+  }
+  function isKnownTerm(t) {
+    return known.has(t) || (VARIANTS[t] || []).some((v) => known.has(v));
+  }
+  function isLearningTerm(t) {
+    return !isKnownTerm(t) && (learning.has(t) || (VARIANTS[t] || []).some((v) => learning.has(v)));
+  }
+  function glossFor(t) {
+    t = String(t || '').toLowerCase();
+    return GLOSSARY[t] || GLOSSARY[ALIAS[t]] || LEGACY[t];
+  }
+
   function markKnown(term) {
     const t = String(term).toLowerCase();
+    dropVariants(t);
     known.add(t);
     learning.delete(t);
     saveVocab();
@@ -93,6 +120,7 @@
 
   function markLearning(term) {
     const t = String(term).toLowerCase();
+    dropVariants(t);
     learning.add(t);
     known.delete(t);
     saveVocab();
@@ -271,7 +299,8 @@
   }
 
   /** Find glossary hits in text; returns [{start,end,term,ru}] non-overlapping, longest-first */
-  function findHits(text) {
+  function findHits(text, qid, ti) {
+    const ctx = (CTX[qid] && CTX[qid][ti]) || null;
     const lower = text.toLowerCase();
     const taken = new Array(text.length).fill(false);
     const hits = [];
@@ -290,7 +319,9 @@
         for (let k = i; k < end; k++) if (taken[k]) { free = false; break; }
         if (leftOk && rightOk && free) {
           for (let k = i; k < end; k++) taken[k] = true;
-          hits.push({ start: i, end, term: t, ru: GLOSSARY[t] });
+          const head = ALIAS[t] || t;
+          let ru = ctx && ctx[head] !== undefined ? ctx[head] : GLOSSARY[head];
+          if (ru !== '-') hits.push({ start: i, end, term: head, ru, surface: text.slice(i, end) });
         }
         from = i + 1;
       }
@@ -305,26 +336,26 @@
 
   /** Key terms for a question (for post-answer chips) */
   function keyTermsFor(item) {
-    const texts = [item.q.q, ...item.opts.map((o) => o.t)];
+    const texts = [[item.q.q, 0], ...item.opts.map((o, i) => [o.t, oi(o, i)])];
     const seen = new Map();
-    texts.forEach((t) => {
-      findHits(t).forEach((h) => {
+    texts.forEach(([t, ti]) => {
+      findHits(t, item.q.id, ti).forEach((h) => {
         if (!seen.has(h.term)) seen.set(h.term, h.ru);
       });
     });
     // Prefer learning + unknown; limit chips
     const all = [...seen.entries()].map(([term, ru]) => ({ term, ru }));
     all.sort((a, b) => {
-      const rank = (t) => (learning.has(t) ? 0 : known.has(t) ? 2 : 1);
+      const rank = (t) => (isLearningTerm(t) ? 0 : isKnownTerm(t) ? 2 : 1);
       return rank(a.term) - rank(b.term) || b.term.length - a.term.length;
     });
     return all.slice(0, 8);
   }
 
-  function renderTappable(text, allowTap) {
-    const hits = allowTap ? findHits(text) : [];
+  function renderTappable(text, allowTap, qid, ti) {
+    const hits = allowTap ? findHits(text, qid, ti) : [];
     // Filter: known words are plain (not tappable)
-    const active = hits.filter((h) => !known.has(h.term));
+    const active = hits.filter((h) => !isKnownTerm(h.term));
     if (!active.length) {
       const span = document.createElement('span');
       span.textContent = text;
@@ -374,13 +405,13 @@
   function refreshTaps(item) {
     const qEl = $('#q-text');
     qEl.innerHTML = '';
-    qEl.appendChild(renderTappable(item.q.q, true));
+    qEl.appendChild(renderTappable(item.q.q, true, item.q.id, 0));
 
     $$('#opts .opt').forEach((btn, idx) => {
       const enText = btn.querySelector('.en-text');
       if (!enText || !item.opts[idx]) return;
       enText.innerHTML = '';
-      enText.appendChild(renderTappable(item.opts[idx].t, true));
+      enText.appendChild(renderTappable(item.opts[idx].t, true, item.q.id, oi(item.opts[idx], idx)));
     });
   }
 
@@ -396,8 +427,8 @@
     wrap.classList.remove('hidden');
     terms.forEach(({ term, ru }) => {
       const div = document.createElement('div');
-      const isK = known.has(term);
-      const isL = learning.has(term);
+      const isK = isKnownTerm(term);
+      const isL = isLearningTerm(term);
       div.className = 'term-chip' + (isK ? ' known' : isL ? ' learning' : '');
       div.innerHTML =
         `<span class="tw"></span><span class="tr"></span>` +
@@ -440,7 +471,7 @@
 
     const qEl = $('#q-text');
     qEl.innerHTML = '';
-    qEl.appendChild(renderTappable(q.q, true));
+    qEl.appendChild(renderTappable(q.q, true, q.id, 0));
 
     const imgWrap = $('#q-img-wrap');
     imgWrap.innerHTML = '';
@@ -466,7 +497,7 @@
       btn.innerHTML =
         `<span class="en"><span class="letter">${LETTERS[idx]}</span><span class="en-text"></span></span>` +
         `<span class="ru"></span>`;
-      btn.querySelector('.en-text').appendChild(renderTappable(o.t, true));
+      btn.querySelector('.en-text').appendChild(renderTappable(o.t, true, q.id, oi(o, idx)));
       btn.querySelector('.ru').textContent = o.tr || '';
       if (!item.answered) {
         btn.addEventListener('click', (e) => {
@@ -712,7 +743,7 @@
       return;
     }
     terms.forEach((term) => {
-      const ru = safeRu(term, GLOSSARY[term]);
+      const ru = safeRu(term, glossFor(term));
       const div = document.createElement('div');
       div.className = 'vocab-item';
       div.innerHTML =
@@ -739,10 +770,10 @@
   }
 
   function startFlashcards() {
-    flashQueue = [...learning].filter((t) => GLOSSARY[t]);
+    flashQueue = [...learning].filter((t) => glossFor(t));
     if (!flashQueue.length) {
       // fallback: sample unknown from glossary
-      const pool = Object.keys(GLOSSARY).filter((t) => !known.has(t) && t.indexOf(' ') === -1);
+      const pool = Object.keys(GLOSSARY).filter((t) => !isKnownTerm(t) && t.indexOf(' ') === -1);
       flashQueue = shuffle(pool).slice(0, 30);
     } else {
       flashQueue = shuffle(flashQueue);
@@ -766,7 +797,7 @@
     }
     const term = flashQueue[flashIdx];
     $('#flash-en').textContent = term;
-    $('#flash-ru').textContent = safeRu(term, GLOSSARY[term]);
+    $('#flash-ru').textContent = safeRu(term, glossFor(term));
     $('#flash-ru').classList.toggle('hidden', !flashRevealed);
     $('#flash-hint').textContent = flashRevealed
       ? 'Отметьте: знаете или ещё учите'
@@ -879,7 +910,7 @@
 
   function safeRu(term, ru) {
     if (isGoodGloss(term, ru)) return String(ru).trim();
-    const hit = GLOSSARY[String(term || '').toLowerCase()];
+    const hit = glossFor(term);
     if (isGoodGloss(term, hit)) return String(hit).trim();
     return '—';
   }
@@ -897,6 +928,20 @@
       .filter((k) => k.indexOf(' ') >= 0 || k.indexOf('-') >= 0)
       .sort((a, b) => b.length - a.length);
     WORD_SET = new Set(keys.filter((k) => k.indexOf(' ') < 0));
+    // phrase variants → head phrase (only when the head has a gloss)
+    Object.keys(ALIAS).forEach((v) => {
+      const lv = v.toLowerCase();
+      const head = String(ALIAS[v]).toLowerCase();
+      ALIAS[lv] = head;
+      if (!GLOSSARY[head] || GLOSSARY[lv]) {
+        if (!GLOSSARY[head]) delete ALIAS[lv];
+        return;
+      }
+      (VARIANTS[head] = VARIANTS[head] || []).push(lv);
+      if (lv.indexOf(' ') >= 0 || lv.indexOf('-') >= 0) PHRASE_LIST.push(lv);
+      else WORD_SET.add(lv);
+    });
+    PHRASE_LIST.sort((a, b) => b.length - a.length);
   }
 
   // ---------- Progress transfer via link ----------
@@ -1026,10 +1071,23 @@
     loadVocab();
     loadProgress();
     try {
-      const [qRes, gRes] = await Promise.all([
+      const optJson = (u) =>
+        fetch(u, { cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : {}))
+          .catch(() => ({}));
+      const [qRes, gRes, ctxJ, aliasJ, legacyJ] = await Promise.all([
         fetch('questions.json', { cache: 'no-store' }),
         fetch('glossary.json', { cache: 'no-store' }),
+        optJson('context.json'),
+        optJson('aliases.json'),
+        optJson('legacy.json'),
       ]);
+      CTX = ctxJ || {};
+      ALIAS = aliasJ || {};
+      LEGACY = {};
+      Object.keys(legacyJ || {}).forEach((k) => {
+        LEGACY[String(k).toLowerCase()] = legacyJ[k];
+      });
       if (!qRes.ok) throw new Error('HTTP ' + qRes.status);
       DATA = await qRes.json();
       if (gRes.ok) {

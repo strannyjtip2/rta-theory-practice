@@ -1,4 +1,4 @@
-const CACHE = 'rta-theory-v7-transfer';
+const CACHE = 'rta-theory-v8-context';
 const CORE = [
   './',
   './index.html',
@@ -7,6 +7,9 @@ const CORE = [
   './transfer.js',
   './questions.json',
   './glossary.json',
+  './context.json',
+  './aliases.json',
+  './legacy.json',
   './manifest.webmanifest'
 ];
 
